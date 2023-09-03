@@ -27,7 +27,7 @@ capture_screen()
 
 # Function to find the closest location of the target color to the cursor
 def find_closest_target_color():
-    time.sleep(0.001)  # Sleep for 1 millisecond (adjust as needed)
+    time.sleep(0.0001)  # Sleep for 1 millisecond (adjust as needed)
 
     # Use ctypes to call GetCursorPos and retrieve cursor position
     cursor_pos = ctypes.wintypes.POINT()
@@ -70,10 +70,10 @@ def set_target_color():
 def hotkey_action():
     capture_screen()  # Refresh the screenshot
     target_x, target_y = find_closest_target_color()
-    
+
     # Move the cursor smoothly to the target position
     move_cursor_smooth(target_x, target_y)
-    
+
     print("Hotkey activated")  # Debug line
 
 # Function to listen for the hotkey combination
@@ -86,27 +86,39 @@ def pick_color():
     global color_picking_mode
     color_picking_mode = not color_picking_mode
     if color_picking_mode:
-        pick_color_button.config(text="Pick Color (Click Again to Confirm)")
-        window.bind("<Button-1>", on_color_picked)  # Bind left mouse click event
+        pick_color_button.config(text="Picking Color")
+        pick_color_button.config(state=tk.DISABLED)  # Disable the button while picking
+        monitor_mouse_thread = threading.Thread(target=monitor_mouse)
+        monitor_mouse_thread.daemon = True
+        monitor_mouse_thread.start()
     else:
         pick_color_button.config(text="Pick Color")
-        window.unbind("<Button-1>")  # Unbind left mouse click event
+        pick_color_button.config(state=tk.NORMAL)  # Enable the button after picking
 
-def on_color_picked(event):
-    pixel_color = pyautogui.pixel(event.x_root, event.y_root)
+def monitor_mouse():
+    while color_picking_mode:
+        if keyboard.is_pressed('esc'):
+            break
+        if keyboard.is_pressed('shift'): # Exit picking mode if shift key is pressed
+            pick_color()
+            break
+        if keyboard.is_pressed('ctrl'): # Capture the color when Ctrl is pressed
+            x, y = pyautogui.position()
+            on_color_picked(x, y)
+            time.sleep(0.2)  # Sleep to prevent capturing multiple times while Ctrl is held
+
+def on_color_picked(x, y):
+    pixel_color = pyautogui.pixel(x, y)
     target_color = pixel_color[:3]  # Get the RGB values
     red_var.set(target_color[0])
     green_var.set(target_color[1])
     blue_var.set(target_color[2])
     status_label.config(text=f"Target color set to {target_color}")
-    global color_picking_mode
-    color_picking_mode = False  # Disable color picking mode
-    pick_color_button.config(text="Pick Color")
 
 # Function to move the cursor smoothly to a target position
 def move_cursor_smooth(target_x, target_y):
     steps = cursor_smoothing
-    
+
     for step in range(steps):
         # Calculate the next cursor position
         alpha = (step + 1) / steps
@@ -114,15 +126,19 @@ def move_cursor_smooth(target_x, target_y):
         user32.GetCursorPos(ctypes.byref(cursor_pos))
         current_x = int((1 - alpha) * cursor_pos.x + alpha * target_x)
         current_y = int((1 - alpha) * cursor_pos.y + alpha * target_y)
-        
+
         # Set the cursor position
         user32.SetCursorPos(current_x, current_y)
-        
-        time.sleep(0.001)  # Sleep for 1 millisecond (adjust as needed)
 
+        time.sleep(0.001)  # Sleep for 1 millisecond (adjust as needed)
 
 # Create the main window
 window = tk.Tk()
+window.title("Color Finder")
+
+# Make the GUI stay on top of all other apps
+window.attributes('-topmost', 1)
+
 window.title("Color Finder")
 
 # Create RGB input fields using StringVar variables
